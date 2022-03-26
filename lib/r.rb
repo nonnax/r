@@ -22,25 +22,25 @@ def compile_path_params(path)
     [/^#{compiled_path}$/, extra_params]
 end
 
-@apps=[]
+@apps = []
 @routes = Hash.new []
 
 module ClassMethods
   extend self
   def _call(env)
-    @req=Rack::Request.new env
-    @res=Rack::Response.new
+    @req = Rack::Request.new env
+    @res = Rack::Response.new
     extra_params={}
     route = self
-            .routes[@req.request_method]
-            .detect{|r| @req.path_info.match(r[:path_regexp])}
-            .tap{ |r| extra_params=r[:extra_params].zip(Regexp.last_match&.captures).to_h rescue {} }
+            .routes[ @req.request_method ]
+            .detect{|r| @req.path_info.match( r[:path_regexp] )}
+            .tap{ |r| extra_params = r[:extra_params].zip(Regexp.last_match&.captures).to_h rescue {} }
     
     params = @req.params.merge(extra_params)
 
     status = @res.status
     headers = @res.headers.empty? ? {'Content-type'=>'text/html; charset=UTF-8'} : @res.headers
-    body = instance_exec params, &route[:code] rescue nil
+    body = instance_exec params, &route[:body] rescue nil
     
     return [status, headers, [body]] unless body.nil? 
     self.not_found 
@@ -56,8 +56,8 @@ module ClassMethods
   
   %i[get post].each do |verb|
     define_method(verb) do |&block|
-      r={ path: self.path, path_regexp: nil, extra_params: nil , code: block}
-      r[:path_regexp], r[:extra_params]=compile_path_params(self.path)
+      r={ path: self.path, path_regexp: nil, extra_params: nil , body: block}
+      r[:path_regexp], r[:extra_params] = compile_path_params(self.path)
             
       self.routes[verb.upcase] << r    
     end
@@ -71,8 +71,7 @@ def R u
     extend ClassMethods
     meta_def(:routes){routes}
     meta_def(:path){u}
-    meta_def(:inherited){|ch| 
-      apps << ch
-    }
+    meta_def(:inherited){|ch| apps<<ch }
   }
 end
+
