@@ -13,6 +13,15 @@ def erb t, b=bindimg
   ERB.new(template).result(b)
 end
 
+def compile_path_params(path)
+    extra_params = []
+    compiled_path = path.gsub(/:\w+/) do |match|
+      extra_params << match.gsub(':', '').to_sym
+      '([^/?#]+)'
+    end
+    [/^#{compiled_path}$/, extra_params]
+end
+
 @apps=[]
 @routes = Hash.new []
 
@@ -21,31 +30,41 @@ module ClassMethods
   def _call(env)
     @req=Rack::Request.new env
     @res=Rack::Response.new
-
+    extra_params={}
     route = self
             .routes[@req.request_method]
-            .detect{|r| @req.path_info.match(Regexp.new r[:path]) }
-    body=instance_exec env, &route[:code]
+            .detect{|r| @req.path_info.match(r[:path_regexp])}
+            .tap{ |r| extra_params=r[:extra_params].zip(Regexp.last_match&.captures).to_h rescue {} }
+    
+    params = @req.params.merge(extra_params)
+
     status = @res.status
-    status = 404 unless body
-    headers = {'Content-type'=>'text/html'}
-    headers = @res.headers unless @res.headers.empty?
-    [status, headers, [body]]
+    headers = @res.headers.empty? ? {'Content-type'=>'text/html; charset=UTF-8'} : @res.headers
+    body = instance_exec params, &route[:code] rescue nil
+    
+    return [status, headers, [body]] unless body.nil? 
+    self.not_found 
   end
+  
   def call(env)
     dup._call(env)
+  end
+  
+  def not_found
+    [404, {'Content-type'=>'text/html; charset=UTF-8'}, ["Not Found"]]
+  end
+  
+  %i[get post].each do |verb|
+    define_method(verb) do |&block|
+      r={ path: self.path, path_regexp: nil, extra_params: nil , code: block}
+      r[:path_regexp], r[:extra_params]=compile_path_params(self.path)
+            
+      self.routes[verb.upcase] << r    
+    end
   end  
-  def get &block
-    r={ path: path.first , code: block}
-    self.routes[:GET]<<r
-  end
-  def post &block
-    r={ path: path.first, code: block}
-    self.routes[:POST]<<r
-  end
 end
 
-def R *u
+def R u
   apps=@apps
   routes=@routes
   klass=Class.new {
