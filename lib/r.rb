@@ -18,12 +18,19 @@ end
 
 module ClassMethods
   extend self
-  def _call(env)    
-    request_method=env['REQUEST_METHOD'].to_sym
-    request_path=env['PATH_INFO']
-    route = self.routes[request_method].detect{|r| request_path.match(Regexp.new r[:path]) }
-    body=instance_exec env, &route[:code] rescue '404'
-    [200, {'Content-type'=>'text/html'}, [body]]
+  def _call(env)
+    @req=Rack::Request.new env
+    @res=Rack::Response.new
+
+    route = self
+            .routes[@req.request_method]
+            .detect{|r| @req.path_info.match(Regexp.new r[:path]) }
+    body=instance_exec env, &route[:code]
+    status = @res.status
+    status = 404 unless body
+    headers = {'Content-type'=>'text/html'}
+    headers = @res.headers unless @res.headers.empty?
+    [status, headers, [body]]
   end
   def call(env)
     dup._call(env)

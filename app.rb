@@ -5,6 +5,7 @@ require_relative 'lib/r'
 class App < R '/home/(\d+)'
   get do |env|
     @path = 'pato'
+    # @res.redirect 'https://myflixer.to'
     erb :index, binding
   end
   post do
