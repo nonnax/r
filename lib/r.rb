@@ -8,45 +8,68 @@ class Object #:nodoc:
   end
 end
 
-def erb t, b=bindimg
-  template=send(t.to_sym)
-  ERB.new(template).result(b)
-end
+module U
+  #utils
+  module_function
+  def compile_path_params(path)
+      extra_params = []
+      compiled_path = path.gsub(/:\w+/) do |match|
+        extra_params << match.gsub(':', '').to_sym
+        '([^/?#]+)'
+      end
+      [/^#{compiled_path}$/, extra_params]
+  end
 
-@apps=[]
-@routes = Hash.new []
+  def erb t, b=bindimg
+    template=send(t.to_sym)
+    ERB.new(template).result(b)
+  end
+  def get_extra_params(route_path:, path_info:)
+    path, extra_params=route_path
+    path.match(path_info)
+    extra_params=extra_params.zip(Regexp.last_match.captures).to_h rescue {}
+  end
+end
 
 module ClassMethods
-  extend self
-  def _call(env)    
-    request_method=env['REQUEST_METHOD'].to_sym
-    request_path=env['PATH_INFO']
-    route = self.routes[request_method].detect{|r| request_path.match(Regexp.new r[:path]) }
-    body=instance_exec env, &route[:code] rescue '404'
-    [200, {'Content-type'=>'text/html'}, [body]]
+  def apps
+    @@apps||=[]  
   end
-  def call(env)
-    dup._call(env)
-  end  
-  def get &block
-    r={ path: path.first , code: block}
-    self.routes[:GET]<<r
+
+  %i[GET POST PUT DELETE].each{|v|
+    define_method(v.downcase){|&block| self.code[v]=block }
+  }
+  
+  def _call(env)
+    @req=Rack::Request.new env
+    @res=Rack::Response.new
+    @res.headers.merge!( {'Content-type'=>'text/html; charset=UTF-8'} )
+    request_method=@req.request_method.to_sym
+    params=@req.params
+    route = self.apps.detect{|r| [@req.path_info.match?(r.path[0]), !r.code[request_method].nil?].all? }
+
+    extra_params=U.get_extra_params route_path: route.path, path_info: @req.path_info
+    
+    body = instance_exec( params.merge!(extra_params), &route.code[request_method] ) rescue nil
+    
+    return [@res.status, @res.headers, [body]] if body
+    [404, {'Content-type'=>'text/html'}, ["Not Found"]]
   end
-  def post &block
-    r={ path: path.first, code: block}
-    self.routes[:POST]<<r
-  end
+
+  def call(env)=dup._call(env)
+    
 end
 
-def R *u
-  apps=@apps
-  routes=@routes
+
+def R u
   klass=Class.new {
     extend ClassMethods
-    meta_def(:routes){routes}
-    meta_def(:path){u}
-    meta_def(:inherited){|ch| 
-      apps << ch
+    extend U
+    meta_def(:code){ @code||={} }
+    meta_def(:path){ 
+      @path, @extra_params = U.compile_path_params(u) unless [@path, @extra_params].any? 
+      [@path, @extra_params]
     }
+    meta_def(:inherited){|ch| apps<<ch }
   }
 end
