@@ -49,7 +49,7 @@ module ClassMethods
     params=@req.params
     route = self.apps.detect{|r| [@req.path_info.match?(r.path[0]), !r.code[request_method].nil?].all? }
 
-    extra_params=U.get_extra_params route_path: route.path, path_info: @req.path_info
+    extra_params=U.get_extra_params( route_path: route.path, path_info: @req.path_info) rescue {}
     
     body = instance_exec( params.merge!(extra_params), &route.code[request_method] ) rescue nil
     
