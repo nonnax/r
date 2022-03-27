@@ -21,9 +21,10 @@ module U
   end
 
   def erb t, b=bindimg
-    template=send(t.to_sym)
-    ERB.new(template).result(b)
+    template=File.expand_path("../views/#{t}.erb",__dir__)
+    ERB.new(File.read(template)).result(b)
   end
+
   def get_extra_params(route_path:, path_info:)
     path, extra_params=route_path
     path.match(path_info)
