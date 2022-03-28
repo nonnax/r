@@ -12,17 +12,30 @@ module U
   #utils
   module_function
   def compile_path_params(path)
-      extra_params = []
-      compiled_path = path.gsub(/:\w+/) do |match|
-        extra_params << match.gsub(':', '').to_sym
-        '([^/?#]+)'
-      end
-      [/^#{compiled_path}$/, extra_params]
+    extra_params = []
+    compiled_path = path.gsub(/:\w+/) do |match|
+      extra_params << match.gsub(':', '').to_sym
+      '([^/?#]+)'
+    end
+    [/^#{compiled_path}$/, extra_params]
   end
-
-  def erb t, b=bindimg
-    template=File.expand_path("../views/#{t}.erb",__dir__)
-    ERB.new(File.read(template)).result(b)
+  
+  def _render(text, b=binding)
+    ERB.new(text).result(b)
+  end
+  
+  def erb t, b=binding, layout: true
+    # render template from class_method <t> or file <t> in /views
+    f, l = [t, :layout].map{|f| File.expand_path("../views/#{f}.erb",__dir__) rescue nil }
+    
+    template = self.respond_to?(t)?send(t):File.read(f)
+    t_layout = self.respond_to?(:layout)?send(:layout):File.read(l)
+        
+    s=_render(template, b)
+    s=_render(t_layout){s}
+    s
+  rescue 
+    "Not Found: #{t}"
   end
 
   def get_extra_params(route_path:, path_info:)
@@ -33,13 +46,12 @@ module U
 end
 
 module ClassMethods
+  attr_accessor :req, :res
   def apps
     @@apps||=[]  
   end
 
-  %i[GET POST PUT DELETE].each{|v|
-    define_method(v.downcase){|&block| self.code[v]=block }
-  }
+  %i[GET POST PUT DELETE].each{|v| define_method(v.downcase){|&block| self.code[v]=block }  }
   
   def _call(env)
     @req=Rack::Request.new env
@@ -52,13 +64,13 @@ module ClassMethods
     extra_params=U.get_extra_params( route_path: route.path, path_info: @req.path_info) rescue {}
     
     body = instance_exec( params.merge!(extra_params), &route.code[request_method] ) rescue nil
-    
-    return [@res.status, @res.headers, [body]] if body
+    @res.write body
+    return @res.finish if body
     [404, {'Content-type'=>'text/html'}, ["Not Found"]]
   end
 
   def call(env)=dup._call(env)
-    
+  def layout = "layout <%= yield %>"
 end
 
 
