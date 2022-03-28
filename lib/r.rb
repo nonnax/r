@@ -26,6 +26,7 @@ module U
   
   def erb t, b=binding, layout: true
     # render template from class_method <t> or file <t> in /views
+    # class method templates must be defined the App controller; used by all succeeding controllers
     f, l = [t, :layout].map{|f| File.expand_path("../views/#{f}.erb",__dir__) rescue nil }
     
     template = self.respond_to?(t)?send(t):File.read(f)

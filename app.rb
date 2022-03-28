@@ -5,7 +5,7 @@ require_relative 'lib/r'
 class App < R '/home/:id'
   get do |env|
     @path = 'pato'
-    "env #{env} #{@path}"
+    env = "env #{env} #{@path} #{self.apps.map(&:path)}"
     erb :index, binding
   end
   post do
@@ -13,7 +13,9 @@ class App < R '/home/:id'
     t="@param = 'parang PELICAN'"
     # erb :index, binding
   end
-  #templates 
+  
+  # inline-templates must be defined the App controller; used by all succeeding controllers
+  
   def self.index
     %{
       response env: 
@@ -26,27 +28,32 @@ class App < R '/home/:id'
       <%= yield %>
     }
   end
+  def self.captures
+    %{
+      Captured
+      params: 
+      <%= params%>
+    }
+  end
+
+end
+
+class Index < R '/'
+  get{|params| res.redirect '/home/1'}
 end
 
 class Next < R '/:id'
   get do |params|
-    # @res.status=300
-    # @res.headers.merge!({'Content-type'=>'application/json'})
     env="params: #{params}"
     res.redirect "/home/#{params[:id]}"
-    erb :xindex, binding
+    erb :xindex, binding # shows erb error message
   end
 end
 
 class S < R '/param/:id'
   get do |params|
+    p self.methods.sort-Object.methods
     erb :captures, binding
   end
 end
 
-def captures
-  %{
-    params: 
-    <%= params%>
-  }
-end
