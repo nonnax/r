@@ -11,7 +11,7 @@ class App < R '/home/:id'
   post do
     @path = 'pato'
     t="@param = 'parang PELICAN'"
-    # erb :index, binding
+    erb :index, binding
   end
   
   # inline-templates must be defined the App controller; used by all succeeding controllers
@@ -35,7 +35,6 @@ class App < R '/home/:id'
       <%= params%>
     }
   end
-
 end
 
 class Index < R '/'
@@ -51,9 +50,6 @@ class Next < R '/:id'
 end
 
 class S < R '/param/:id'
-  get do |params|
-    p self.methods.sort-Object.methods
-    erb :captures, binding
-  end
+  get{ |params| erb :captures, binding}
 end
 

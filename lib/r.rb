@@ -39,14 +39,9 @@ module U
     "Not Found: #{t}"
   end
 
-  def get_extra_params(route_path:, path_info:)
-    path, extra_params=route_path
-    path.match(path_info)
-    extra_params=extra_params.zip(Regexp.last_match.captures).to_h rescue {}
-  end
 end
 
-module ClassMethods
+module R
   attr_accessor :req, :res
   def apps
     @@apps||=[]  
@@ -57,31 +52,49 @@ module ClassMethods
   def _call(env)
     @req=Rack::Request.new env
     @res=Rack::Response.new
-    @res.headers.merge!( {'Content-type'=>'text/html; charset=UTF-8'} )
-    request_method=@req.request_method.to_sym
-    params=@req.params
-    route = self.apps.detect{|r| [@req.path_info.match?(r.path[0]), !r.code[request_method].nil?].all? }
-
-    extra_params=U.get_extra_params( route_path: route.path, path_info: @req.path_info) rescue {}
-    
-    body = instance_exec( params.merge!(extra_params), &route.code[request_method] ) rescue nil
-    @res.write body
-    return @res.finish if body
-    [404, {'Content-type'=>'text/html'}, ["Not Found"]]
+    finish
   end
 
   def call(env)=dup._call(env)
+  
+  def finish
+    res.headers.merge!( {'Content-type'=>'text/html; charset=UTF-8'} )
+    request_method=req.request_method.to_sym
+
+    route = self.apps.detect{|r| [req.path_info.match?(r.path.first), !r.code[request_method].nil?].all? }
+    
+    if route
+      params = req.params.merge!( _extra_params_of(route.path) )
+      instance_exec( params , &route.code[request_method] ).then{ |body| res.write body }
+    else
+      res.status = 404 
+      res.write 'Not Found'
+    end
+   
+    return res.finish
+  end
+  
   def layout = "layout <%= yield %>"
+
+  private
+  
+  def _extra_params_of(path)
+    _path, extra_params=path
+    _path.match(req.path_info)
+    extra_params.zip(Regexp.last_match.captures).to_h rescue {}
+  end
+  
 end
 
+# controller creator
 
 def R u
   klass=Class.new {
-    extend ClassMethods
+    extend R
     extend U
     meta_def(:code){ @code||={} }
     meta_def(:path){ 
-      @path, @extra_params = U.compile_path_params(u) unless [@path, @extra_params].any? 
+      @path, @extra_params = U.compile_path_params(u) unless [@path, @extra_params].any? # cache vals
       [@path, @extra_params]
     }
     meta_def(:inherited){|ch| apps<<ch }
